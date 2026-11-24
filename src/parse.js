@@ -114,7 +114,7 @@ function stripPrefixes(argv) {
     const t = argv[i];
     if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) i++;
     else if (['sudo', 'command', 'exec', 'time', 'nohup'].includes(t)) i++;
-    else if (t === 'npx' && argv[i + 1] === 'installguard') i += 2;
+    else if (t === 'npx' && /^installguard(-cli)?$/.test(argv[i + 1] || '')) i += 2;
     else if (t === 'installguard' || t === 'ig') i++;
     else break;
   }

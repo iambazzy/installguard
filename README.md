@@ -7,7 +7,7 @@
 Catches fake, typosquatted, hijacked and AI-hallucinated packages on **npm** and **PyPI** before any of their code runs on your machine.
 
 [![CI](https://github.com/iambazzy/installguard/actions/workflows/ci.yml/badge.svg)](https://github.com/iambazzy/installguard/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/installguard?color=2ea44f)](https://www.npmjs.com/package/installguard)
+[![npm](https://img.shields.io/npm/v/installguard-cli?color=2ea44f)](https://www.npmjs.com/package/installguard-cli)
 [![zero dependencies](https://img.shields.io/badge/dependencies-0-2ea44f)](package.json)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-%E2%98%95-ffdd00)](https://buymeacoffee.com/iambazzy)
@@ -36,8 +36,10 @@ If everything looks normal, your install runs as usual. If not, you see why and 
 ## Install
 
 ```sh
-npm install -g installguard
+npm install -g installguard-cli
 ```
+
+The package is called `installguard-cli`; the command it installs is `installguard`.
 
 Requires Node.js 18.17 or newer, on macOS, Linux or Windows. **installguard has zero dependencies**, because a security tool shouldn't add to your supply chain.
 

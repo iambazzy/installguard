@@ -2,7 +2,7 @@
 
 ## 1.0.0 (2026-11-24)
 
-First stable release.
+First stable release, published on npm as `installguard-cli` (the command is still `installguard`).
 
 - **Checks the whole dependency tree, not just the packages you name.** Before installing, installguard previews the full install without running any package code (npm lockfile-only resolution, `pip --dry-run --report` on wheels, `uv --dry-run`) and checks every package that would be added.
 - **Lockfile installs are checked too:** `npm ci`, plain `npm install`, `yarn`, `pnpm install`, `bun install`, `poetry install`, `uv sync`, `pipenv install`.

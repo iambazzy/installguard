@@ -1,5 +1,5 @@
 {
-  "name": "installguard",
+  "name": "installguard-cli",
   "version": "1.0.0",
   "description": "Check packages, and everything they pull in, before you install them. Catches fake, typosquatted, hijacked and AI-hallucinated packages on npm and PyPI. Zero dependencies.",
   "type": "module",
