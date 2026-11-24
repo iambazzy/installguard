@@ -20,9 +20,9 @@ node bin/installguard.js check express
 
 ## Good first contributions
 
-- Add names to the popular-package lists in `src/data/popular.js`
-- Support another installer or flag in `src/parse.js`
-- New ecosystems: crates.io, Go modules, RubyGems
+- Add well-known names the generator misses to `src/data/popular-extra.js` (the main lists in `src/data/popular.js` are rebuilt with `npm run update-popular`)
+- Support another installer or flag in `src/parse.js`, or another lockfile format in `src/lockfiles.js`
+- New ecosystems: crates.io, Go modules, RubyGems, Maven
 - Hooks and setup guides for other AI coding agents
 
 ## Reporting a malicious package

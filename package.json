@@ -1,7 +1,7 @@
 {
   "name": "installguard",
-  "version": "0.1.0",
-  "description": "Check packages before you install them. Catches fake, typosquatted and AI-hallucinated packages on npm and PyPI. Zero dependencies.",
+  "version": "1.0.0",
+  "description": "Check packages, and everything they pull in, before you install them. Catches fake, typosquatted, hijacked and AI-hallucinated packages on npm and PyPI. Zero dependencies.",
   "type": "module",
   "bin": {
     "installguard": "bin/installguard.js",
@@ -14,22 +14,29 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "update-popular": "node scripts/update-popular.mjs"
   },
   "engines": {
     "node": ">=18.17"
   },
   "keywords": [
-    "security",
-    "supply-chain",
-    "typosquatting",
-    "slopsquatting",
-    "npm",
-    "pypi",
-    "pip",
     "ai",
     "cli",
-    "dependencies"
+    "dependencies",
+    "lockfile",
+    "npm",
+    "pip",
+    "pnpm",
+    "poetry",
+    "pypi",
+    "security",
+    "slopsquatting",
+    "supply-chain",
+    "supply-chain-security",
+    "typosquatting",
+    "uv",
+    "yarn"
   ],
   "author": "Mohammad Basit (https://github.com/iambazzy)",
   "license": "MIT",
@@ -42,10 +49,6 @@
   },
   "homepage": "https://github.com/iambazzy/installguard#readme",
   "funding": [
-    {
-      "type": "github",
-      "url": "https://github.com/sponsors/iambazzy"
-    },
     {
       "type": "buymeacoffee",
       "url": "https://buymeacoffee.com/iambazzy"

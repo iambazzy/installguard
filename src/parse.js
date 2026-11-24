@@ -122,49 +122,77 @@ function stripPrefixes(argv) {
 }
 
 /**
- * Work out which packages an argv would install.
- * Returns { manager, packages, skipped } or null if it is not an install.
+ * Work out what an install command would do.
+ * Returns null if it is not an install, otherwise:
+ *   { family: 'npm'|'pypi', manager, mode: 'add'|'lockfile', packages, skipped,
+ *     specs (package arguments as typed), flags (registry/index flags to reuse),
+ *     installArgs (pip: everything after "install"), pipCmd }
+ * mode "lockfile" means "install what the lockfile says" (npm ci, yarn, ...).
  */
 export function parseInstallArgv(argvIn, { cwd = process.cwd() } = {}) {
   const argv = stripPrefixes(argvIn);
   if (!argv.length) return null;
-  const tool = argv[0].split('/').pop();
+  const tool = argv[0].split(/[\\/]/).pop().replace(/\.(cmd|exe|ps1)$/i, '');
 
   // npm-family
   if (NPM_TOOLS[tool]) {
     let i = 1;
     while (i < argv.length && argv[i].startsWith('-')) i += NPM_VALUE_FLAGS.has(argv[i]) ? 2 : 1;
     const sub = argv[i];
+    const lockfileOnly =
+      (tool === 'npm' && (sub === 'ci' || sub === 'clean-install' || sub === 'install-clean' || sub === 'isntall-clean')) ||
+      (tool === 'yarn' && (sub === undefined || sub === 'install')) ||
+      (tool === 'pnpm' && sub === 'install-test');
+    if (lockfileOnly) return { family: 'npm', manager: tool, mode: 'lockfile', clean: tool === 'npm', packages: [], skipped: [], specs: [], flags: [] };
     if (!sub || !NPM_TOOLS[tool].has(sub)) return null;
     const packages = [];
     const skipped = [];
+    const specs = [];
+    const flags = [];
     for (let j = i + 1; j < argv.length; j++) {
       const t = argv[j];
       if (t.startsWith('-')) {
+        if (/^--registry(=|$)/.test(t)) flags.push(t.includes('=') ? t : `${t}=${argv[j + 1]}`);
         if (NPM_VALUE_FLAGS.has(t)) j++;
         continue;
       }
       const p = parseNpmSpec(t);
-      if (p) packages.push(p);
-      else skipped.push(t);
+      if (p) {
+        packages.push(p);
+        specs.push(t);
+      } else skipped.push(t);
     }
-    return { manager: tool, packages, skipped };
+    if (!packages.length && !skipped.length) {
+      // "npm install" / "pnpm i" / "bun install" with no names: install from the lockfile
+      return { family: 'npm', manager: tool, mode: 'lockfile', clean: false, packages, skipped, specs, flags };
+    }
+    return { family: 'npm', manager: tool, mode: 'add', packages, skipped, specs, flags };
   }
 
-  // pip-family: pip / pip3 / python -m pip / uv pip / uv add / poetry add / pipx install
+  // Python lockfile installs
+  if ((tool === 'poetry' && (argv[1] === 'install' || argv[1] === 'sync')) || (tool === 'uv' && argv[1] === 'sync') || (tool === 'pipenv' && (argv[1] === 'sync' || (argv[1] === 'install' && !argv.slice(2).some((a) => !a.startsWith('-')))))) {
+    return { family: 'pypi', manager: tool, mode: 'lockfile', packages: [], skipped: [], specs: [], flags: [] };
+  }
+
+  // pip-family: pip / pip3 / python -m pip / uv pip / uv add / poetry add / pipx / pipenv install <pkg>
   let rest = null;
   let manager = tool;
-  if (/^pip(\d(\.\d+)?)?$/.test(tool) && argv[1] === 'install') rest = argv.slice(2);
-  else if (/^python(\d(\.\d+)?)?$/.test(tool) && argv[1] === '-m' && /^pip\d?$/.test(argv[2] || '') && argv[3] === 'install') {
+  let pipCmd = null;
+  if (/^pip(\d(\.\d+)?)?$/.test(tool) && argv[1] === 'install') {
+    rest = argv.slice(2);
+    pipCmd = [argv[0]];
+  } else if (/^(python|py)(\d(\.\d+)?)?$/.test(tool) && argv[1] === '-m' && /^pip\d?$/.test(argv[2] || '') && argv[3] === 'install') {
     rest = argv.slice(4);
     manager = 'pip';
+    pipCmd = [argv[0], '-m', 'pip'];
   } else if (tool === 'uv' && argv[1] === 'pip' && argv[2] === 'install') rest = argv.slice(3);
   else if ((tool === 'uv' || tool === 'poetry') && argv[1] === 'add') rest = argv.slice(2);
-  else if (tool === 'pipx' && argv[1] === 'install') rest = argv.slice(2);
+  else if ((tool === 'pipx' || tool === 'pipenv') && argv[1] === 'install') rest = argv.slice(2);
   if (!rest) return null;
 
   const packages = [];
   const skipped = [];
+  const specs = [];
   for (let j = 0; j < rest.length; j++) {
     const t = rest[j];
     if (t === '-r' || t === '--requirement') {
@@ -179,7 +207,11 @@ export function parseInstallArgv(argvIn, { cwd = process.cwd() } = {}) {
       continue;
     }
     if (t.startsWith('--requirement=')) {
-      packages.push(...parseRequirementsFile(resolve(cwd, t.split('=')[1])));
+      try {
+        packages.push(...parseRequirementsFile(resolve(cwd, t.split('=')[1])));
+      } catch {
+        skipped.push(t);
+      }
       continue;
     }
     if (t === '-e' || t === '--editable') {
@@ -191,10 +223,12 @@ export function parseInstallArgv(argvIn, { cwd = process.cwd() } = {}) {
       continue;
     }
     const p = parsePipSpec(t);
-    if (p) packages.push(p);
-    else skipped.push(t);
+    if (p) {
+      packages.push(p);
+      specs.push(t);
+    } else skipped.push(t);
   }
-  return { manager, packages, skipped };
+  return { family: 'pypi', manager, mode: 'add', packages, skipped, specs, flags: [], installArgs: rest, pipCmd };
 }
 
 /** Find every install inside a full shell command line (used by agent hooks). */

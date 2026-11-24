@@ -1,13 +1,13 @@
 import { POPULAR_NPM, POPULAR_PYPI } from './data/popular.js';
+import { EXTRA_NPM, EXTRA_PYPI } from './data/popular-extra.js';
 import { normalizePypiName } from './registries/pypi.js';
 
+const NPM_NAMES = [...new Set([...POPULAR_NPM, ...EXTRA_NPM].map((s) => s.toLowerCase()))];
+const PYPI_NAMES = [...new Set([...POPULAR_PYPI, ...EXTRA_PYPI].map(normalizePypiName))];
+
 const LISTS = {
-  npm: { names: POPULAR_NPM, set: new Set(POPULAR_NPM), norm: (s) => s.toLowerCase() },
-  pypi: {
-    names: POPULAR_PYPI,
-    set: new Set(POPULAR_PYPI.map(normalizePypiName)),
-    norm: normalizePypiName,
-  },
+  npm: { names: NPM_NAMES, set: new Set(NPM_NAMES), norm: (s) => s.toLowerCase() },
+  pypi: { names: PYPI_NAMES, set: new Set(PYPI_NAMES), norm: normalizePypiName },
 };
 
 /** Optimal string alignment distance (Levenshtein plus adjacent swaps). */
@@ -29,6 +29,12 @@ export function editDistance(a, b) {
 }
 
 const strip = (s) => s.replace(/[-_.]/g, '');
+
+function sameFamily(a, b) {
+  const i = Math.max(a.lastIndexOf('-'), a.lastIndexOf('/'));
+  const j = Math.max(b.lastIndexOf('-'), b.lastIndexOf('/'));
+  return i > 0 && i === j && a.slice(0, i) === b.slice(0, j);
+}
 
 const AFFIXES = [
   (p) => `${p}-js`, (p) => `${p}js`, (p) => `${p}-node`, (p) => `node-${p}`,
@@ -52,7 +58,10 @@ export function findLookalike(ecosystem, name) {
     if (strip(p) === strip(n)) return { target: raw, kind: 'separator' };
     if (p.length < 4 || Math.abs(p.length - n.length) > 2) continue;
     const dist = editDistance(n, p);
-    const allowed = p.length >= 8 ? 2 : 1;
+    const allowed = p.length >= 10 ? 2 : 1;
+    // "tree-sitter-hcl" vs "tree-sitter-c": members of a naming family that
+    // differ only in their last segment are not typos of each other.
+    if (dist === 2 && sameFamily(n, p)) continue;
     if (dist <= allowed && (!best || dist < best.distance)) {
       best = { target: raw, kind: 'typo', distance: dist };
     }

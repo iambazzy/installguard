@@ -17,7 +17,7 @@ export function palette(stream = process.stderr) {
 
 const ICON = { critical: '✖', high: '▲', medium: '●', low: '·', info: '?' };
 
-export function renderReport(results, { stream = process.stderr, verbose = false } = {}) {
+export function renderReport(results, { stream = process.stderr, verbose = false, compact, title } = {}) {
   const c = palette(stream);
   const color = { critical: c.red, high: c.red, medium: c.yellow, low: c.dim, info: c.cyan };
   const verdictLabel = {
@@ -29,19 +29,26 @@ export function renderReport(results, { stream = process.stderr, verbose = false
   };
   const verdictIcon = { block: c.red('✖'), danger: c.red('▲'), caution: c.yellow('●'), unknown: c.cyan('?'), ok: c.green('✔') };
 
-  const width = Math.min(40, Math.max(...results.map((r) => r.pkg.name.length), 8));
+  // Long lists (dependency trees, lockfiles) only show what needs attention.
+  const compactList = compact ?? results.length > 12;
+  const shownResults = compactList && !verbose ? results.filter((r) => r.verdict !== 'ok' || r.allowed) : results;
+  const hidden = results.length - shownResults.length;
+  const width = Math.min(40, Math.max(...shownResults.map((r) => r.pkg.name.length), 8));
   const lines = [];
-  for (const r of results) {
-    const version = r.meta?.version ? c.dim(r.meta.version) : '';
+  if (title) lines.push(c.dim(title));
+  for (const r of shownResults) {
+    const version = c.dim(String(r.meta?.version || '').padEnd(10));
     const eco = c.dim(r.pkg.ecosystem === 'npm' ? 'npm ' : 'pypi');
     const label = r.allowed ? c.dim('allowed by config') : verdictLabel[r.verdict];
-    lines.push(`  ${verdictIcon[r.verdict]} ${eco} ${c.bold(r.pkg.name.padEnd(width))} ${version.padEnd(10)} ${label}`);
+    const via = r.pkg.transitive && !compactList ? c.dim(' (dependency)') : '';
+    lines.push(`  ${verdictIcon[r.verdict]} ${eco} ${c.bold(r.pkg.name.padEnd(width))} ${version} ${label}${via}`);
     const shown = verbose ? r.findings : r.findings.filter((f) => f.severity !== 'low' || r.verdict !== 'ok');
     for (const f of shown) {
       lines.push(`      ${color[f.severity](ICON[f.severity] + ' ' + f.severity.toUpperCase().padEnd(8))} ${f.message}`);
     }
   }
-  stream.write(lines.join('\n') + '\n');
+  if (hidden > 0) lines.push(`  ${c.green('✔')} ${hidden} ${shownResults.length ? 'other ' : ''}package${hidden === 1 ? '' : 's'} look${hidden === 1 ? 's' : ''} fine`);
+  if (lines.length) stream.write(lines.join('\n') + '\n');
 }
 
 export function toJson(results) {
@@ -53,6 +60,7 @@ export function toJson(results) {
     verdict: r.verdict,
     allowed: Boolean(r.allowed),
     weeklyDownloads: r.meta?.weeklyDownloads ?? null,
+    dependency: Boolean(r.pkg.transitive),
     findings: r.findings,
   }));
 }

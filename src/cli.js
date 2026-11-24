@@ -4,72 +4,63 @@ import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 
 import { checkPackages } from './analyze.js';
+import { cacheClear, cacheDir } from './cache.js';
 import { loadConfig } from './config.js';
+import { auditTargets, evaluateInstall } from './guard.js';
 import { getJson } from './http.js';
-import {
-  findInstallsInCommand,
-  parseInstallArgv,
-  parseNpmSpec,
-  parsePackageJson,
-  parsePipSpec,
-  parseRequirementsFile,
-} from './parse.js';
+import { findInstallsInCommand, parseInstallArgv, parseNpmSpec, parsePackageJson, parsePipSpec, parseRequirementsFile } from './parse.js';
 import { palette, renderReport, toJson } from './report.js';
+import { winQuote } from './resolve.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 const HELP = `installguard ${VERSION}
-Check packages before you install them.
+Check packages, and everything they pull in, before you install them.
 
 Usage
   installguard <install command>     check, then run it
   installguard check <pkg...>        check packages (npm by default)
-  installguard audit [dir]           check package.json and requirements*.txt
+  installguard audit [dir]           check a project's lockfiles (or manifests)
   installguard scan "<command>"      check a shell command without running it
-  installguard hook                  agent hook: reads a tool call on stdin
+  installguard hook                  AI agent hook: reads a tool call on stdin
+  installguard cache clear           forget cached registry lookups
 
 Examples
-  installguard npm install express lodash
+  installguard npm install express
   installguard pip install requests==2.32.3
+  installguard npm ci
   installguard check pypi:requests npm:left-pad
-  installguard check --pypi numpy pandas
   installguard audit .
 
 Options
   -y, --yes       continue without asking, even if something looks risky
   --strict        also stop on "check this" (medium) findings
+  --direct        only check the packages you name, not their dependencies
   --dry-run       check only, never run the install
   --json          print results as JSON on stdout
-  -v, --verbose   show every finding, including minor ones
+  -v, --verbose   show every finding and every package checked
   -h, --help      show this help
   --version       show the version
 
-Config: .installguardrc.json  {"allow": ["internal-pkg"], "strict": false}
+Config: .installguardrc.json
+  {"allow": ["internal-pkg"], "strict": false, "minReleaseAgeDays": 0}
 Exit codes: 0 ok, 1 stopped because of a risky package, 2 error.
 `;
 
+const FLAG_NAMES = {
+  '-y': 'yes', '--yes': 'yes', '--strict': 'strict', '--json': 'json', '-v': 'verbose', '--verbose': 'verbose',
+  '--dry-run': 'dryRun', '--pypi': 'pypi', '--direct': 'direct', '-h': 'help', '--help': 'help', '--version': 'version',
+};
+
 function parseFlags(args) {
-  const flags = { yes: false, strict: false, json: false, verbose: false, dryRun: false, pypi: false };
+  const flags = {};
   let i = 0;
-  for (; i < args.length; i++) {
-    const a = args[i];
-    if (a === '-y' || a === '--yes') flags.yes = true;
-    else if (a === '--strict') flags.strict = true;
-    else if (a === '--json') flags.json = true;
-    else if (a === '-v' || a === '--verbose') flags.verbose = true;
-    else if (a === '--dry-run') flags.dryRun = true;
-    else if (a === '--pypi') flags.pypi = true;
-    else if (a === '-h' || a === '--help') flags.help = true;
-    else if (a === '--version') flags.version = true;
-    else break;
-  }
+  for (; i < args.length && FLAG_NAMES[args[i]]; i++) flags[FLAG_NAMES[args[i]]] = true;
   return { flags, rest: args.slice(i) };
 }
 
-function isStopping(result, strict) {
-  if (result.allowed) return false;
-  return result.verdict === 'block' || result.verdict === 'danger' || (strict && result.verdict === 'caution');
-}
+const isStopping = (r, strict) =>
+  !r.allowed && (r.verdict === 'block' || r.verdict === 'danger' || (strict && r.verdict === 'caution'));
 
 async function ask(question) {
   const rl = createInterface({ input: process.stdin, output: process.stderr });
@@ -80,21 +71,63 @@ async function ask(question) {
 
 function run(argv) {
   return new Promise((res) => {
-    const child = spawn(argv[0], argv.slice(1), { stdio: 'inherit', shell: process.platform === 'win32' });
+    const win = process.platform === 'win32';
+    const child = win
+      ? spawn(argv.map(winQuote).join(' '), { stdio: 'inherit', shell: true })
+      : spawn(argv[0], argv.slice(1), { stdio: 'inherit' });
+    // Ctrl+C goes to the installer; we wait for it and pass its exit code on.
+    const ignore = () => {};
+    process.on('SIGINT', ignore);
+    process.on('SIGTERM', ignore);
     child.on('error', (err) => {
       process.stderr.write(`installguard: could not run ${argv[0]}: ${err.message}\n`);
       res(127);
     });
-    child.on('exit', (code, signal) => res(signal ? 1 : code ?? 0));
+    child.on('exit', (code, signal) => {
+      process.off('SIGINT', ignore);
+      process.off('SIGTERM', ignore);
+      res(signal ? 130 : (code ?? 0));
+    });
   });
 }
 
-async function report(results, flags) {
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const pluralDeps = (n) => `${n} ${n === 1 ? 'dependency' : 'dependencies'}`;
+
+function stageReporter(flags) {
+  if (flags.json) return () => {};
   const c = palette();
-  if (flags.json) process.stdout.write(JSON.stringify(toJson(results), null, 2) + '\n');
-  else if (results.length) renderReport(results, { verbose: flags.verbose });
-  const stopping = results.filter((r) => isStopping(r, flags.strict));
-  return { stopping, c };
+  return (stage, count) => {
+    const what =
+      stage === 'named'
+        ? `checking ${plural(count, 'package')}`
+        : stage === 'dependencies'
+          ? `checking ${pluralDeps(count)} they would bring in`
+          : `checking ${plural(count, 'package')} ${stage}`;
+    process.stderr.write(c.dim(`installguard: ${what}\n`));
+  };
+}
+
+function printNotes(notes, flags) {
+  if (flags.json || !notes.length) return;
+  const c = palette();
+  for (const n of notes) process.stderr.write(c.yellow(`  ! ${n}\n`));
+}
+
+async function decide(stopping, flags) {
+  const c = palette();
+  if (!stopping.length) return true;
+  if (flags.yes) {
+    process.stderr.write(c.yellow('\n--yes given: continuing anyway.\n'));
+    return true;
+  }
+  if (process.stdin.isTTY && process.stderr.isTTY) {
+    const ok = await ask(c.bold(`\n${stopping.length === 1 ? 'A package looks' : `${stopping.length} packages look`} risky. Install anyway? [y/N] `));
+    if (!ok) process.stderr.write('Cancelled. Nothing was installed.\n');
+    return ok;
+  }
+  process.stderr.write(c.red('\nStopped: risky package and no terminal to confirm. Nothing was installed. Use --yes to override.\n'));
+  return false;
 }
 
 async function cmdCheck(names, flags, config) {
@@ -112,17 +145,17 @@ async function cmdCheck(names, flags, config) {
     packages.push(p);
   }
   if (!packages.length) throw new Error('give at least one package name, e.g. installguard check express');
-  const results = await checkPackages(packages, { http: getJson, allow: config.allow });
-  const { stopping } = await report(results, flags);
-  return stopping.length ? 1 : 0;
+  const results = await checkPackages(packages, { http: getJson, allow: config.allow, minReleaseAgeDays: config.minReleaseAgeDays });
+  if (flags.json) process.stdout.write(JSON.stringify(toJson(results), null, 2) + '\n');
+  else renderReport(results, { verbose: flags.verbose, compact: false });
+  return results.some((r) => isStopping(r, flags.strict || config.strict)) ? 1 : 0;
 }
 
-function collectManifests(dir) {
+function parseManifests(dir) {
   const packages = [];
   const sources = [];
-  const pj = join(dir, 'package.json');
-  if (existsSync(pj)) {
-    packages.push(...parsePackageJson(pj));
+  if (existsSync(join(dir, 'package.json'))) {
+    packages.push(...parsePackageJson(join(dir, 'package.json')));
     sources.push('package.json');
   }
   for (const f of readdirSync(dir)) {
@@ -132,53 +165,69 @@ function collectManifests(dir) {
     }
   }
   const seen = new Set();
-  const unique = packages.filter((p) => {
-    const key = `${p.ecosystem}:${p.name}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  return { packages: unique, sources };
+  return {
+    packages: packages.filter((p) => {
+      const k = `${p.ecosystem}:${p.name}`;
+      return seen.has(k) ? false : (seen.add(k), true);
+    }),
+    sources,
+  };
 }
 
 async function cmdAudit(dirArg, flags, config) {
   const dir = resolve(dirArg || '.');
-  const { packages, sources } = collectManifests(dir);
+  if (!existsSync(dir)) throw new Error(`no such folder: ${dir}`);
   const c = palette();
-  if (!packages.length) {
-    process.stderr.write(`installguard: no dependencies found in ${dir} (looked for package.json, requirements*.txt)\n`);
+  const target = flags.direct ? { ...parseManifests(dir), fromLockfile: false } : auditTargets(dir, { parseManifests });
+  if (!target.packages.length) {
+    if (flags.json) process.stdout.write('[]\n');
+    else process.stderr.write(`installguard: no dependencies found in ${dir} (looked for lockfiles, package.json, requirements*.txt)\n`);
     return 0;
   }
-  if (!flags.json) process.stderr.write(c.dim(`installguard: checking ${packages.length} dependencies from ${sources.join(', ')}\n`));
-  const results = await checkPackages(packages, { http: getJson, allow: config.allow });
-  const { stopping } = await report(results, flags);
   if (!flags.json) {
+    process.stderr.write(c.dim(`installguard: checking ${plural(target.packages.length, 'package')} from ${target.sources.join(', ')}\n`));
+  }
+  const results = await checkPackages(
+    target.packages.map((p) => ({ ...p, transitive: target.fromLockfile })),
+    { http: getJson, allow: config.allow, minReleaseAgeDays: config.minReleaseAgeDays },
+  );
+  const strict = flags.strict || config.strict;
+  const stopping = results.filter((r) => isStopping(r, strict));
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(toJson(results), null, 2) + '\n');
+  } else {
+    renderReport(results, { verbose: flags.verbose });
     process.stderr.write(
-      stopping.length
-        ? c.red(`\n${stopping.length} risky ${stopping.length === 1 ? 'dependency' : 'dependencies'} found.\n`)
-        : c.green('\nNo risky dependencies found.\n'),
+      stopping.length ? c.red(`\n${plural(stopping.length, 'risky package')} found.\n`) : c.green('\nNo risky packages found.\n'),
     );
   }
   return stopping.length ? 1 : 0;
 }
 
-async function checkCommandLine(line, config) {
+async function evaluateLine(line, flags, config) {
   const installs = findInstallsInCommand(line);
-  const packages = installs.flatMap((i) => i.packages);
-  if (!packages.length) return { results: [], installs };
-  const results = await checkPackages(packages, { http: getJson, allow: config.allow });
-  return { results, installs };
+  const all = { direct: [], deps: [], notes: [] };
+  for (const parsed of installs) {
+    const r = await evaluateInstall(parsed, { http: getJson, config, deps: !flags.direct, onStage: stageReporter(flags) });
+    all.direct.push(...r.direct);
+    all.deps.push(...r.deps);
+    all.notes.push(...r.notes);
+  }
+  return { installs, ...all };
 }
 
 async function cmdScan(line, flags, config) {
-  const { results } = await checkCommandLine(line, config);
-  if (!results.length) {
-    if (!flags.json) process.stderr.write('installguard: no package installs found in that command\n');
-    else process.stdout.write('[]\n');
-    return 0;
+  const { installs, direct, deps, notes } = await evaluateLine(line, flags, config);
+  const results = [...direct, ...deps];
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(toJson(results), null, 2) + '\n');
+  } else {
+    if (!installs.length) process.stderr.write('installguard: no package installs found in that command\n');
+    if (direct.length) renderReport(direct, { verbose: flags.verbose, compact: false });
+    if (deps.length) renderReport(deps, { verbose: flags.verbose, title: '  dependencies:' });
+    printNotes(notes, flags);
   }
-  const { stopping } = await report(results, flags);
-  return stopping.length ? 1 : 0;
+  return results.some((r) => isStopping(r, flags.strict || config.strict)) ? 1 : 0;
 }
 
 async function readStdin() {
@@ -188,10 +237,10 @@ async function readStdin() {
 }
 
 /**
- * Agent hook. Works with pre-command agent hooks (JSON with
- * tool_input.command on stdin) and with anything that pipes a raw
- * command line. Exit 2 = block, with the reason on stderr so the agent
- * reads it and can correct itself.
+ * Agent hook. Accepts JSON with tool_input.command (the common
+ * pre-command hook format), {"command": ...}, or a raw command line.
+ * Exit 2 = block, with the reason on stderr so the agent reads it and can
+ * correct itself.
  */
 async function cmdHook(flags, config) {
   const input = await readStdin();
@@ -204,13 +253,13 @@ async function cmdHook(flags, config) {
   }
   if (!command || typeof command !== 'string') return 0;
 
-  const { results } = await checkCommandLine(command, config);
-  const stopping = results.filter((r) => isStopping(r, flags.strict || config.strict));
+  const { direct, deps } = await evaluateLine(command, { ...flags, json: true }, config);
+  const stopping = [...direct, ...deps].filter((r) => isStopping(r, flags.strict || config.strict));
   if (!stopping.length) return 0;
 
   const lines = ['installguard blocked this install because a package looks unsafe:'];
   for (const r of stopping) {
-    lines.push(`- ${r.pkg.ecosystem}:${r.pkg.name}`);
+    lines.push(`- ${r.pkg.ecosystem}:${r.pkg.name}${r.meta?.version ? '@' + r.meta.version : ''}${r.pkg.transitive ? ' (pulled in as a dependency)' : ''}`);
     for (const f of r.findings.filter((f) => f.severity !== 'low' && f.severity !== 'info')) {
       lines.push(`  ${f.severity.toUpperCase()}: ${f.message}`);
     }
@@ -223,40 +272,31 @@ async function cmdHook(flags, config) {
 async function cmdWrap(argv, flags, config) {
   const c = palette();
   const parsed = parseInstallArgv(argv);
-  if (!parsed || !parsed.packages.length) {
-    // Not an install (or "npm install" with no names): nothing to check.
-    if (parsed?.skipped.length && !flags.json) {
-      process.stderr.write(c.dim(`installguard: not checking non-registry sources: ${parsed.skipped.join(', ')}\n`));
-    }
-    return flags.dryRun ? 0 : run(argv);
-  }
+  if (!parsed) return flags.dryRun ? 0 : run(argv); // not an install: pass straight through
 
-  if (!flags.json) {
-    const n = parsed.packages.length;
-    process.stderr.write(c.dim(`installguard: checking ${n} ${n === 1 ? 'package' : 'packages'} before ${parsed.manager} installs\n`));
-  }
-  const results = await checkPackages(parsed.packages, { http: getJson, allow: config.allow });
   const strict = flags.strict || config.strict;
-  const { stopping } = await report(results, { ...flags, strict });
-  if (parsed.skipped.length && !flags.json) {
-    process.stderr.write(c.dim(`  (not checked, not from the registry: ${parsed.skipped.join(', ')})\n`));
+  const { direct, deps, notes, treeUnchecked } = await evaluateInstall(parsed, {
+    http: getJson,
+    config,
+    deps: !flags.direct,
+    onStage: stageReporter(flags),
+  });
+
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(toJson([...direct, ...deps]), null, 2) + '\n');
+  } else {
+    if (direct.length) renderReport(direct, { verbose: flags.verbose, compact: false });
+    if (deps.length) renderReport(deps, { verbose: flags.verbose, title: parsed.mode === 'add' ? '  dependencies:' : undefined });
+    if (parsed.skipped.length) process.stderr.write(c.dim(`  (not checked, not from the registry: ${parsed.skipped.join(', ')})\n`));
+    printNotes(notes, flags);
   }
 
-  if (stopping.length) {
-    if (flags.yes) {
-      process.stderr.write(c.yellow('\n--yes given: installing anyway.\n'));
-    } else if (process.stdin.isTTY && process.stderr.isTTY) {
-      const ok = await ask(c.bold(`\n${stopping.length === 1 ? 'This package looks' : 'Some packages look'} risky. Install anyway? [y/N] `));
-      if (!ok) {
-        process.stderr.write('Cancelled. Nothing was installed.\n');
-        return 1;
-      }
-    } else {
-      process.stderr.write(c.red('\nStopped: risky package and no terminal to confirm. Use --yes to override.\n'));
-      return 1;
-    }
+  const stopping = [...direct, ...deps].filter((r) => isStopping(r, strict));
+  if (strict && treeUnchecked && !flags.yes) {
+    process.stderr.write(c.red('\nStopped (--strict): the dependency tree could not be checked.\n'));
+    return 1;
   }
-
+  if (!(await decide(stopping, flags))) return 1;
   if (flags.dryRun) return stopping.length ? 1 : 0;
   if (!flags.json) process.stderr.write('\n');
   return run(argv);
@@ -276,7 +316,7 @@ export async function main(args) {
   const config = loadConfig();
   const [cmd, ...more] = rest;
   const { flags: moreFlags, rest: tail } = parseFlags(more);
-  const all = { ...flags, ...Object.fromEntries(Object.entries(moreFlags).filter(([, v]) => v)) };
+  const all = { ...flags, ...moreFlags };
 
   switch (cmd) {
     case 'check':
@@ -287,6 +327,14 @@ export async function main(args) {
       return cmdScan(tail.join(' '), all, config);
     case 'hook':
       return cmdHook(all, config);
+    case 'cache':
+      if (tail[0] === 'clear') {
+        cacheClear();
+        process.stdout.write(`Cleared ${cacheDir()}\n`);
+        return 0;
+      }
+      process.stdout.write(`${cacheDir()}\n`);
+      return 0;
     case 'help':
       process.stdout.write(HELP);
       return 0;

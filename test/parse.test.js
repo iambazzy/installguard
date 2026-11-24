@@ -54,8 +54,26 @@ test('install commands across package managers', () => {
 test('non-install commands are ignored', () => {
   assert.equal(parseInstallArgv(['npm', 'run', 'build']), null);
   assert.equal(parseInstallArgv(['pip', 'list']), null);
-  assert.equal(parseInstallArgv(['yarn', 'install']), null);
-  assert.deepEqual(parseInstallArgv(['npm', 'install']).packages, []);
+  assert.equal(parseInstallArgv(['yarn', 'build']), null);
+  assert.equal(parseInstallArgv(['poetry', 'run', 'pytest']), null);
+});
+
+test('installs from a lockfile are recognised', () => {
+  for (const argv of [['npm', 'ci'], ['npm', 'install'], ['npm', 'i', '--omit=dev'], ['yarn'], ['yarn', 'install'], ['pnpm', 'install'], ['bun', 'install'], ['poetry', 'install'], ['uv', 'sync'], ['pipenv', 'install'], ['pipenv', 'sync']]) {
+    assert.equal(parseInstallArgv(argv)?.mode, 'lockfile', argv.join(' '));
+  }
+  assert.equal(parseInstallArgv(['npm', 'ci']).clean, true);
+  assert.equal(parseInstallArgv(['pipenv', 'install', 'requests']).mode, 'add');
+});
+
+test('keeps what is needed to preview the full install', () => {
+  const n = parseInstallArgv(['npm', 'i', '--registry', 'https://r.example', 'zod@3', '-D']);
+  assert.deepEqual(n.specs, ['zod@3']);
+  assert.deepEqual(n.flags, ['--registry=https://r.example']);
+  const p = parseInstallArgv(['python3', '-m', 'pip', 'install', '-U', 'httpx']);
+  assert.deepEqual(p.pipCmd, ['python3', '-m', 'pip']);
+  assert.deepEqual(p.installArgs, ['-U', 'httpx']);
+  assert.equal(parseInstallArgv(['C:\\node\\npm.cmd', 'install', 'ms']).family, 'npm');
 });
 
 test('finds installs inside a full shell line', () => {

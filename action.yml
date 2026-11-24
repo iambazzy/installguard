@@ -1,12 +1,12 @@
 name: installguard
-description: Fail the build when dependencies look fake, typosquatted or AI-hallucinated (npm and PyPI).
+description: Fail the build when any dependency, however deep, looks fake, typosquatted, hijacked or AI-hallucinated (npm and PyPI).
 author: iambazzy
 branding:
   icon: shield
   color: green
 inputs:
   path:
-    description: Folder containing package.json and/or requirements*.txt
+    description: Folder containing your lockfile (or package.json / requirements*.txt)
     required: false
     default: .
   strict:

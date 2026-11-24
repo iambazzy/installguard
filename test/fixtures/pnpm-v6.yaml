@@ -1,0 +1,19 @@
+lockfileVersion: '6.0'
+
+dependencies:
+  chalk:
+    specifier: ^4.1.2
+    version: 4.1.2
+
+packages:
+
+  /@types/ms@0.7.34:
+    resolution: {integrity: sha512-x}
+    dev: false
+
+  /chalk@4.1.2:
+    resolution: {integrity: sha512-y}
+    dev: false
+
+  /react-dom@18.2.0(react@18.2.0):
+    resolution: {integrity: sha512-z}

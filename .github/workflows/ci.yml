@@ -21,6 +21,18 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: npm test
+      - name: Real install through installguard
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/e2e" && cd "$RUNNER_TEMP/e2e"
+          npm init -y > /dev/null
+          node "$GITHUB_WORKSPACE/bin/installguard.js" npm install ms@2.1.3 --no-audit --no-fund
+          node -e "require('ms')"
+          node "$GITHUB_WORKSPACE/bin/installguard.js" npm ci --no-audit --no-fund
+          if node "$GITHUB_WORKSPACE/bin/installguard.js" npm install lodahs < /dev/null; then
+            echo "expected the malware placeholder to be blocked" && exit 1
+          fi
+          test ! -d node_modules/lodahs
 
   smoke:
     runs-on: ubuntu-latest

