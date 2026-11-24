@@ -7,7 +7,7 @@ export const SEVERITY = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
 const DAY = 24 * 60 * 60 * 1000;
 const POPULAR_DOWNLOADS = 100_000;
 const SUSPICIOUS_SCRIPT =
-  /curl|wget|https?:\/\/|base64|\beval\b|node\s+-e|python\s+-c|powershell|\|\s*(ba)?sh\b|chmod|\/dev\/tcp|nc\s+-|child_process|Buffer\.from/i;
+  /curl|wget|https?:\/\/|base64|\beval\b|python\s+-c|powershell|\|\s*(ba)?sh\b|chmod|\/dev\/tcp|nc\s+-|child_process|Buffer\.from/i;
 
 const REGISTRY_NAME = { npm: 'npm', pypi: 'PyPI' };
 
@@ -71,7 +71,7 @@ export function assess(pkg, meta, { now = Date.now() } = {}) {
   }
 
   if (meta.requestedVersionMissing) {
-    add('high', 'VERSION_NOT_FOUND', `Version ${pkg.version} does not exist.`);
+    add('high', 'VERSION_NOT_FOUND', /^\d+\.\d+\.\d+/.test(pkg.version) ? `Version ${pkg.version} does not exist.` : `No published version matches "${pkg.version}".`);
   }
 
   const created = meta.created ? ageDays(meta.created, now) : null;
@@ -93,15 +93,22 @@ export function assess(pkg, meta, { now = Date.now() } = {}) {
   const hooks = Object.entries(meta.installScripts || {});
   if (hooks.length) {
     const shown = hooks.map(([k, v]) => `${k}: ${v.length > 80 ? v.slice(0, 77) + '...' : v}`).join('; ');
+    const fresh = versionAge !== null && versionAge < 14;
     if (hooks.some(([, v]) => SUSPICIOUS_SCRIPT.test(v))) {
-      add('high', 'INSTALL_SCRIPT', `Runs a script on install that downloads or executes code (${shown}).`);
+      // On a widely used package an odd-looking script is only alarming
+      // in a brand-new release (the window where hijacks happen).
+      const sev = popular && !fresh ? 'low' : 'high';
+      add(sev, 'INSTALL_SCRIPT', `Runs a script on install that downloads or executes code (${shown}).`);
     } else {
       add(popular ? 'low' : 'medium', 'INSTALL_SCRIPT', `Runs a script on install (${shown}).`);
     }
   }
 
   if (meta.newPublisher) {
-    add('medium', 'NEW_PUBLISHER', `Version ${meta.version} was published by "${meta.publisher}", who never published this package before.`);
+    // Maintainers change all the time. It only matters while the release
+    // is new, before the community has had a chance to notice a takeover.
+    const recent = versionAge !== null && versionAge < 14;
+    add(recent ? 'medium' : 'low', 'NEW_PUBLISHER', `Version ${meta.version} was published by "${meta.publisher}", who never published this package before.`);
   }
   if (meta.deprecated) add('medium', 'DEPRECATED', `Deprecated: ${String(meta.deprecated).slice(0, 120)}`);
   if (meta.yanked) add('high', 'YANKED', `Version ${meta.version} was yanked (pulled) by its authors.`);

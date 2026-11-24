@@ -238,8 +238,8 @@ export function parsePackageJson(file) {
         continue;
       }
       if (isNonRegistryNpm(range)) continue;
-      const exact = /^\d+\.\d+\.\d+(-[\w.]+)?$/.test(range) ? range : null;
-      out.push({ ecosystem: 'npm', name: name.toLowerCase(), version: exact, raw: name });
+      const version = range.trim() && range !== '*' && range !== 'latest' ? range.trim() : null;
+      out.push({ ecosystem: 'npm', name: name.toLowerCase(), version, raw: name });
     }
   }
   return out;

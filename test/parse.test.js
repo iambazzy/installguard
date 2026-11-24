@@ -83,7 +83,8 @@ test('requirements files and package.json', () => {
   const pkgs = parsePackageJson(join(dir, 'package.json'));
   assert.deepEqual(pkgs.map((p) => p.name), ['express', 'exact', 'vitest', 'real']);
   assert.equal(pkgs[1].version, '1.2.3');
-  assert.equal(pkgs[0].version, null);
+  assert.equal(pkgs[0].version, '^4.18.0');
+  assert.equal(pkgs[2].version, null); // "*"
 
   const viaFlag = parseInstallArgv(['pip', 'install', '-r', 'requirements.txt'], { cwd: dir });
   assert.deepEqual(viaFlag.packages.map((p) => p.name), ['requests', 'six', 'flask']);

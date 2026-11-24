@@ -36,3 +36,12 @@ jobs:
           if node bin/installguard.js check pypi:reqeusts; then
             echo "expected installguard to flag reqeusts" && exit 1
           fi
+      - name: Download counts are reachable
+        run: |
+          node bin/installguard.js check --json express pypi:requests > out.json
+          node -e '
+            const r = require("./out.json");
+            for (const p of r) {
+              console.log(p.name, p.weeklyDownloads);
+              if (!(p.weeklyDownloads > 0)) { console.error("no download count for " + p.name); process.exit(1); }
+            }'

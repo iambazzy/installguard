@@ -1,3 +1,5 @@
+import { maxSatisfying } from '../semver.js';
+
 const REGISTRY = 'https://registry.npmjs.org';
 const DOWNLOADS = 'https://api.npmjs.org/downloads/point/last-week';
 
@@ -31,6 +33,12 @@ export async function lookupNpm(name, { version, http }) {
     if (versions[version]) target = version;
     else if (tags[version]) target = tags[version];
     else if (/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(version)) requestedVersionMissing = true;
+    else {
+      // A range like ^4.19.0: check the version npm would actually install.
+      const match = maxSatisfying(versionNames, version);
+      if (match) target = match;
+      else requestedVersionMissing = true;
+    }
   }
 
   const manifest = versions[target] || {};
@@ -52,6 +60,9 @@ export async function lookupNpm(name, { version, http }) {
     earlier.map((v) => versions[v]?._npmUser?.name).filter(Boolean),
   );
   const publisher = manifest._npmUser?.name || null;
+  // Trusted publishing (CI with verified provenance) is a good sign,
+  // not an account takeover, so it never counts as a new publisher.
+  const trustedPublish = Boolean(manifest._npmUser?.trustedPublisher || manifest.dist?.attestations);
 
   let weeklyDownloads = null;
   try {
@@ -75,7 +86,7 @@ export async function lookupNpm(name, { version, http }) {
     installScripts: scripts,
     publisher,
     newPublisher:
-      Boolean(publisher) && earlier.length >= 3 && earlierPublishers.size > 0 && !earlierPublishers.has(publisher),
+      !trustedPublish && Boolean(publisher) && earlier.length >= 3 && earlierPublishers.size > 0 && !earlierPublishers.has(publisher),
     weeklyDownloads,
   };
 }
