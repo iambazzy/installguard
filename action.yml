@@ -1,0 +1,27 @@
+name: installguard
+description: Fail the build when dependencies look fake, typosquatted or AI-hallucinated (npm and PyPI).
+author: iambazzy
+branding:
+  icon: shield
+  color: green
+inputs:
+  path:
+    description: Folder containing package.json and/or requirements*.txt
+    required: false
+    default: .
+  strict:
+    description: Also fail on medium ("check this") findings
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Check dependencies
+      shell: bash
+      env:
+        IG_PATH: ${{ inputs.path }}
+        IG_STRICT: ${{ inputs.strict }}
+      run: |
+        args=(audit)
+        if [ "$IG_STRICT" = "true" ]; then args+=(--strict); fi
+        FORCE_COLOR=1 node "$GITHUB_ACTION_PATH/bin/installguard.js" "${args[@]}" "$IG_PATH"

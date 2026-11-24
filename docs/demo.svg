@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="348" viewBox="0 0 760 348">
+<rect width="100%" height="100%" rx="12" fill="#0d1117"/>
+<rect x="0.5" y="0.5" width="759" height="347" rx="12" fill="none" stroke="#30363d"/>
+<circle cx="22" cy="22" r="6" fill="#ff5f57"/><circle cx="42" cy="22" r="6" fill="#febc2e"/><circle cx="62" cy="22" r="6" fill="#28c840"/>
+<text x="380" y="27" text-anchor="middle" font-family="ui-sans-serif,-apple-system,Segoe UI,sans-serif" font-size="13" fill="#7d8590">installguard</text>
+<g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" xml:space="preserve">
+<text x="22" y="62"><tspan fill="#7ee787">$ </tspan><tspan fill="#e6edf3">installguard npm install express axois fast-json-parsr</tspan></text>
+<text x="22" y="84"><tspan fill="#7d8590">installguard: checking 3 packages before npm installs</tspan></text>
+<text x="22" y="106"><tspan fill="#3fb950">  ✔ </tspan><tspan fill="#7d8590">npm  </tspan><tspan fill="#e6edf3">express        </tspan><tspan fill="#7d8590">5.3.0   </tspan><tspan fill="#3fb950">looks fine</tspan></text>
+<text x="22" y="128"><tspan fill="#f85149">  ✖ </tspan><tspan fill="#7d8590">npm  </tspan><tspan fill="#e6edf3">axois          </tspan><tspan fill="#7d8590">         </tspan><tspan fill="#f85149">do not install</tspan></text>
+<text x="22" y="150"><tspan fill="#f85149">      ✖ CRITICAL </tspan><tspan fill="#e6edf3">npm removed this package for security reasons</tspan></text>
+<text x="22" y="172"><tspan fill="#e6edf3">                 </tspan><tspan fill="#e6edf3">(usually malware). Only a placeholder is left.</tspan></text>
+<text x="22" y="194"><tspan fill="#f85149">  ✖ </tspan><tspan fill="#7d8590">npm  </tspan><tspan fill="#e6edf3">fast-json-parsr</tspan><tspan fill="#7d8590">         </tspan><tspan fill="#f85149">do not install</tspan></text>
+<text x="22" y="216"><tspan fill="#f85149">      ✖ CRITICAL </tspan><tspan fill="#e6edf3">This package does not exist on npm. It may be a</tspan></text>
+<text x="22" y="238"><tspan fill="#e6edf3">                 </tspan><tspan fill="#e6edf3">name an AI made up, and anyone could register it.</tspan></text>
+<text x="22" y="260"></text>
+<text x="22" y="282"><tspan fill="#e6edf3">Some packages look risky. Install anyway? [y/N] </tspan><tspan fill="#7ee787">n</tspan></text>
+<text x="22" y="304"><tspan fill="#7d8590">Cancelled. Nothing was installed.</tspan></text>
+</g></svg>

@@ -1,0 +1,54 @@
+{
+  "name": "installguard",
+  "version": "0.1.0",
+  "description": "Check packages before you install them. Catches fake, typosquatted and AI-hallucinated packages on npm and PyPI. Zero dependencies.",
+  "type": "module",
+  "bin": {
+    "installguard": "bin/installguard.js",
+    "ig": "bin/installguard.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "keywords": [
+    "security",
+    "supply-chain",
+    "typosquatting",
+    "slopsquatting",
+    "npm",
+    "pypi",
+    "pip",
+    "ai",
+    "cli",
+    "dependencies"
+  ],
+  "author": "Mohammad Basit (https://github.com/iambazzy)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iambazzy/installguard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/iambazzy/installguard/issues"
+  },
+  "homepage": "https://github.com/iambazzy/installguard#readme",
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/iambazzy"
+    },
+    {
+      "type": "buymeacoffee",
+      "url": "https://www.buymeacoffee.com/beestudio"
+    }
+  ]
+}
