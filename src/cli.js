@@ -188,7 +188,7 @@ async function readStdin() {
 }
 
 /**
- * Agent hook. Works with Claude Code's PreToolUse hooks (JSON with
+ * Agent hook. Works with pre-command agent hooks (JSON with
  * tool_input.command on stdin) and with anything that pipes a raw
  * command line. Exit 2 = block, with the reason on stderr so the agent
  * reads it and can correct itself.

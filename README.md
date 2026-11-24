@@ -84,7 +84,7 @@ Checks every dependency in `package.json` and `requirements*.txt`. Exits with co
 
 This is where installguard really helps: agents install packages without reading the warnings. installguard can **block** a risky install *before* the agent runs it, and tell the agent why so it can fix the name itself.
 
-**Claude Code:** add this to `.claude/settings.json` (project) or `~/.claude/settings.json` (everywhere):
+Point any agent that supports pre-command hooks at `installguard hook`. For agents configured with a JSON hooks file, the setup usually looks like this:
 
 ```json
 {
@@ -99,7 +99,7 @@ This is where installguard really helps: agents install packages without reading
 }
 ```
 
-**Any other agent or tool:** pipe the command to `installguard hook`. It accepts JSON (`{"tool_input": {"command": "..."}}` or `{"command": "..."}`) or plain text, and exits `2` with the reason on stderr when it blocks.
+**Any other tool:** pipe the command to `installguard hook`. It accepts JSON (`{"tool_input": {"command": "..."}}` or `{"command": "..."}`) or plain text, and exits `2` with the reason on stderr when it blocks.
 
 ## GitHub Action
 
