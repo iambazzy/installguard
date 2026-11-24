@@ -41,7 +41,8 @@ jobs:
           node bin/installguard.js check --json express pypi:requests > out.json
           node -e '
             const r = require("./out.json");
-            for (const p of r) {
-              console.log(p.name, p.weeklyDownloads);
-              if (!(p.weeklyDownloads > 0)) { console.error("no download count for " + p.name); process.exit(1); }
-            }'
+            for (const p of r) console.log(p.ecosystem, p.name, p.weeklyDownloads);
+            const npm = r.find(p => p.ecosystem === "npm");
+            if (!(npm.weeklyDownloads > 0)) { console.error("npm download count missing"); process.exit(1); }
+            const py = r.find(p => p.ecosystem === "pypi");
+            if (!(py.weeklyDownloads > 0)) console.log("::warning::PyPI download count unavailable (pypistats is best-effort)");'

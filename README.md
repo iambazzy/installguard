@@ -164,7 +164,9 @@ Or set `INSTALLGUARD_ALLOW=pkg-a,pkg-b`.
 
 ## How it works
 
-installguard reads public metadata from the npm registry, the npm downloads API, PyPI's JSON API and pypistats. It never runs or downloads package code. Lookups run in parallel and take about a second. If a registry can't be reached, it says so and lets the install continue rather than guessing.
+installguard reads public metadata from the npm registry, the npm downloads API and PyPI's JSON API. It never runs or downloads package code. Lookups run in parallel and take about a second. If a registry can't be reached, it says so and lets the install continue rather than guessing.
+
+PyPI download counts come from pypistats.org, which sometimes blocks automated requests. When it does, installguard simply skips that one signal; every other PyPI check still runs.
 
 ## Roadmap
 
