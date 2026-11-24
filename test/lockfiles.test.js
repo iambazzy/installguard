@@ -45,3 +45,13 @@ test('package-lock v1 (nested) and non-registry entries', () => {
   });
   assert.deepEqual(ids(parsePackageLock(v1)), ['a@1.0.0', 'b@2.0.0']);
 });
+
+test('Windows line endings and a byte-order mark are handled', () => {
+  const crlf = (f) => '\uFEFF' + read(f).replace(/\r?\n/g, '\r\n');
+  assert.deepEqual(ids(parseYarnLock(crlf('yarn.lock'))), NODE_TREE);
+  assert.deepEqual(ids(parsePnpmLock(crlf('pnpm-lock.yaml'))), NODE_TREE);
+  assert.deepEqual(ids(parsePackageLock(crlf('package-lock.json'))), NODE_TREE);
+  assert.deepEqual(ids(parseBunLock(crlf('bun.lock'))), NODE_TREE);
+  assert.equal(parseTomlPackages(crlf('poetry.lock')).length, 5);
+  assert.equal(parseYarnLock(crlf('yarn-berry.lock')).length, 2);
+});

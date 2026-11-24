@@ -15,6 +15,7 @@ const npmPkg = (name, version) => ({ ecosystem: 'npm', name: name.toLowerCase(),
 const pyPkg = (name, version) => ({ ecosystem: 'pypi', name, version, raw: name });
 
 export function parsePackageLock(text) {
+  text = lf(text);
   const lock = JSON.parse(text);
   const out = [];
   if (lock.packages) {
@@ -39,6 +40,7 @@ export function parsePackageLock(text) {
 }
 
 export function parseYarnLock(text) {
+  text = lf(text);
   const out = [];
   // Yarn 2+ ("berry"): resolution: "name@npm:1.2.3"
   for (const m of text.matchAll(/^\s+resolution:\s+"?(@?[^@"\s]+)@npm:([^"\s]+)"?\s*$/gm)) out.push(npmPkg(m[1], m[2]));
@@ -62,6 +64,7 @@ export function parseYarnLock(text) {
 }
 
 export function parsePnpmLock(text) {
+  text = lf(text);
   const out = [];
   const section = text.split(/^packages:\s*$/m)[1]?.split(/^\S/m)[0] || '';
   for (const m of section.matchAll(/^ {2}['"]?\/?((?:@[^@/\s'"]+\/)?[^@/\s'"(]+)@(\d[^(:'"\s]*)/gm)) {
@@ -73,6 +76,7 @@ export function parsePnpmLock(text) {
 }
 
 export function parseBunLock(text) {
+  text = lf(text);
   // bun.lock is JSON with trailing commas
   const lock = JSON.parse(text.replace(/,(\s*[}\]])/g, '$1'));
   const out = [];
@@ -88,6 +92,7 @@ export function parseBunLock(text) {
 }
 
 export function parseTomlPackages(text) {
+  text = lf(text);
   // poetry.lock and uv.lock: [[package]] tables with name/version lines
   const out = [];
   for (const block of text.split(/^\[\[package\]\]\s*$/m).slice(1)) {
@@ -103,6 +108,7 @@ export function parseTomlPackages(text) {
 }
 
 export function parsePipfileLock(text) {
+  text = lf(text);
   const lock = JSON.parse(text);
   const out = [];
   for (const group of ['default', 'develop']) {
@@ -139,6 +145,9 @@ export function readLockfile(file) {
   const base = file.split(/[\\/]/).pop();
   return PARSERS[base](readFileSync(file, 'utf8'));
 }
+
+// Windows checkouts often have CRLF line endings; every parser normalises.
+const lf = (text) => String(text).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
 
 /** All lockfiles in a folder, as { file, packages } (npm-family first). */
 export function findLockfiles(dir, { ecosystem } = {}) {

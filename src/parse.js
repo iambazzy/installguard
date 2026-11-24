@@ -261,7 +261,7 @@ export function parseRequirementsFile(file, seen = new Set()) {
 }
 
 export function parsePackageJson(file) {
-  const pkg = JSON.parse(readFileSync(file, 'utf8'));
+  const pkg = JSON.parse(readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
   const out = [];
   for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
     for (const [name, range] of Object.entries(pkg[field] || {})) {

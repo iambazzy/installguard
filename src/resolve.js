@@ -54,7 +54,7 @@ export async function resolveNpmTree(specs, { cwd = process.cwd(), flags = [] } 
   try {
     const pj = join(cwd, 'package.json');
     if (existsSync(pj)) {
-      const pkg = JSON.parse(readFileSync(pj, 'utf8'));
+      const pkg = JSON.parse(readFileSync(pj, 'utf8').replace(/^\uFEFF/, ''));
       // Workspaces and local file: deps can't be resolved outside the repo.
       delete pkg.workspaces;
       for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {

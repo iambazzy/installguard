@@ -28,7 +28,7 @@ export function loadConfig(cwd = process.cwd()) {
   const config = { allow: [], strict: false, minReleaseAgeDays: 0 };
   for (const f of files) {
     try {
-      const c = JSON.parse(readFileSync(f, 'utf8'));
+      const c = JSON.parse(readFileSync(f, 'utf8').replace(/^\uFEFF/, ''));
       if (Array.isArray(c.allow)) config.allow.push(...c.allow);
       if (typeof c.strict === 'boolean') config.strict = c.strict;
       if (Number.isFinite(c.minReleaseAgeDays) && c.minReleaseAgeDays >= 0) config.minReleaseAgeDays = c.minReleaseAgeDays;
