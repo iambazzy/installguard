@@ -182,7 +182,7 @@ Ideas and PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 installguard is free and open source, built and maintained by [@iambazzy](https://github.com/iambazzy) in my spare time. If it caught something for you, or your team relies on it, please consider supporting it:
 
 <a href="https://github.com/sponsors/iambazzy"><img src="https://img.shields.io/badge/GitHub%20Sponsors-%E2%9D%A4-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub"></a>
-<a href="https://www.buymeacoffee.com/beestudio"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
+<a href="https://buymeacoffee.com/iambazzy"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
 
 **Companies:** sponsorship tiers include your logo here and priority on issues. [Get in touch](mailto:mohammadbasit0404@gmail.com).
 
