@@ -116,7 +116,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: iambazzy/installguard@v1
+      - uses: iambazzy/installguard@v1.0.0
         with:
           path: .          # folder with your lockfile or manifests
           strict: false    # true = also fail on "check this" findings
